@@ -27,5 +27,6 @@ async function request(method: string, path: string, body?: unknown) {
 }
 
 // Defines two functions for GET and POST, uses request as a blueprint.
-export const get = (path: string) => request('GET', path)
-export const post = (path: string, body?: unknown) => request('POST', path, body)
+export const get = (path: string) => request('GET', path);
+export const post = (path: string, body?: unknown) => request('POST', path, body);
+export const patch = (path: string, body?: unknown) => request('PATCH', path, body);

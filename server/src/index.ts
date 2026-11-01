@@ -5,6 +5,8 @@ import session from 'express-session';
 import pgSession from 'connect-pg-simple';
 
 import authRoutes from './routes/auth.js';
+import courseRoutes from './routes/courses.js';
+import onboardingRoutes from './routes/onboarding.js';
 
 const app = express();
 app.use(express.json());
@@ -19,6 +21,8 @@ app.use(session({
 }));
 
 app.use('/api/auth', authRoutes);
+app.use('/api/courses', courseRoutes);
+app.use('/api/onboarding', onboardingRoutes);
 
 app.get('/api/health', async (_req, res) => {
     const { rows } = await pool.query('select now()')

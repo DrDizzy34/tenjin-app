@@ -4,7 +4,7 @@
 CREATE TABLE users (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     email TEXT NOT NULL UNIQUE CHECK (email = LOWER(email)),
-    display_name TEXT,
+    display_name TEXT CHECK (CHAR_LENGTH(display_name) BETWEEN 1 AND 40),
     program TEXT,
     year SMALLINT CHECK (year BETWEEN 1 AND 6),
     bio TEXT CHECK (CHAR_LENGTH(bio) <= 500),
