@@ -10,6 +10,9 @@ import { PreferencesStep } from '../components/onboarding/PreferencesStep.tsx';
 import type { OnboardingData, Course } from '../components/onboarding/types.ts';
 import { ErrorMessage } from '../components/ErrorMessage.tsx';
 
+import { AuthLayout } from '../layouts/AuthLayout.tsx';
+import onboardingBackground from '../assets/onboarding_background.png';
+
 export default function OnboardingPage() {
     const [step, setStep] = useState(0);
     const [data, setData] = useState<OnboardingData>({
@@ -108,39 +111,63 @@ export default function OnboardingPage() {
     // While we check if the user is logged in.
     if (checking) return <p>Loading...</p>
 
+    // TODO: Some weird submit bug, will fix later.
     return (
-        <form onSubmit={handleSubmit}>
-            {step === 0 && (<BasicsStep data={data} update={update} />)}
-            {step === 1 && (<CoursesStep data={data} update={update} courses={courses} loading={coursesLoading} error={coursesError} />)}
-            {step === 2 && (<AvailabilityStep data={data} update={update} />)}
-            {step === 3 && (<PreferencesStep data={data} update={update} />)}            
-            <p>Step {step + 1}/4</p>
+        <AuthLayout>
+            <section className="relative flex flex-1 items-center justify-center px-6 py-12">
+                <img
+                    src={onboardingBackground}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-brand-dark/50" />
 
-            <Button 
-                type="button"
-                variant="secondary"
-                onClick={() => setStep((prev) => prev - 1)}
-                disabled={step <= 0}
-            >Back</Button>
+                <form onSubmit={handleSubmit} className="relative max-w-full w-lg  bg-white p-6 rounded-2xl border-2 border-brand">
+                    {step === 0 && (<BasicsStep data={data} update={update} />)}
+                    {step === 1 && (<CoursesStep data={data} update={update} courses={courses} loading={coursesLoading} error={coursesError} />)}
+                    {step === 2 && (<AvailabilityStep data={data} update={update} />)}
+                    {step === 3 && (<PreferencesStep data={data} update={update} />)} 
 
-            {step < 3 ? (
-                <Button
-                    key="forward"
-                    type="button"
-                    variant="secondary"
-                    onClick={() => setStep((prev) => prev + 1)}
-                    disabled={!isValidStep(step)}
-                >Forward</Button>
-            ) : (
-                <Button
-                    key="submit"
-                    type="submit"
-                    variant="primary"
-                    disabled={!isValidStep(step) || submitting}
-                >Submit</Button>
-            )}
-            {!isValidStep(step) && <ErrorMessage>Fill in or correct the fields marked * to continue.</ErrorMessage>}
-            {submitError && <ErrorMessage>{submitError}</ErrorMessage>}
-        </form>
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm text-gray-500">
+                            <span className="font-medium text-gray-700">
+                                {['Basics', 'Courses', 'Availability', 'Preferences'][step]}
+                            </span>
+                            <span>Step {step + 1} of 4</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-gray-200">
+                            <div
+                                className="h-1.5 rounded-full bg-brand transition-all duration-300"
+                                style={{ width: `${((step + 1) / 4) * 100}%` }}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-gray-200 pt-5">
+                        
+                        <Button 
+                            type="button"
+                            variant="secondary"
+                            onClick={() => setStep((prev) => prev - 1)}
+                            disabled={step <= 0}
+                        >Back</Button>
+
+                        {step < 3 ? (
+                            <Button
+                                type="button"
+                                variant="primary"
+                                onClick={() => setStep((prev) => prev + 1)}
+                                disabled={!isValidStep(step)}
+                            >Continue</Button>
+                        ) : (
+                            <Button type="submit" variant="primary" disabled={!isValidStep(step) || submitting}>
+                                {submitting ? 'Saving...' : 'Finish'}
+                            </Button>
+                        )}
+                    </div>
+                    {submitError && <ErrorMessage>{submitError}</ErrorMessage>}
+                </form>
+            </section>
+        </AuthLayout>
     );
 }
