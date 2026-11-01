@@ -9,8 +9,8 @@ const YEARS = [1, 2, 3, 4, 5, 6];
 export function BasicsStep({ data, update }: StepProps) {
     return (
         <div>
-            <fieldset>
-                <legend>Basic Information:</legend>
+            <div className="space-y-4">
+                <h2 className="text-lg font-semibold text-gray-900">Basic information</h2>
                 <Input 
                     label="Display Name:* "
                     id="display-name-input"
@@ -55,9 +55,10 @@ export function BasicsStep({ data, update }: StepProps) {
                     maxLength={500}
                     value={data.bio}
                     onChange={(e) => update({ bio: e.target.value })}
+                    style={{ resize: 'none' }}
                     placeholder="e.g., There are catacombs hidden under every government building..."
                 />
-            </fieldset>
+            </div>
         </div>
     );
 }
