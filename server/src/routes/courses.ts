@@ -7,7 +7,7 @@ const router = express.Router();
 router.get('/', requireAuth, async (req, res) => {
     // Query and store all of the courses, before returning.
     const coursesResult = await pool.query(
-        'SELECT id, code, title FROM courses ORDER BY code'
+        'SELECT id::INT AS id, code, title FROM courses ORDER BY code'
     );
     return res.json(coursesResult.rows);
 });
