@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import OnboardingPage from './pages/OnboardingPage';
 import DashboardPage from './pages/DashboardPage';
-import GroupsPage from './pages/DashboardPage';
+import GroupsPage from './pages/GroupsPage';
 import SettingsPage from './pages/SettingsPage';
 
 // Note: /groups may be subject to change with an optional :id parameter, we'll get there when we get there, anyways.
