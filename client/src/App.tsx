@@ -14,8 +14,8 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/onboarding" element={<OnboardingPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="./groups" element={<GroupsPage />} />
-        <Route path="./SettingsPage" element={<SettingsPage />} />
+        <Route path="/groups" element={<GroupsPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
