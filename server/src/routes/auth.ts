@@ -21,7 +21,7 @@ router.post('/request-code', async (req, res) => {
 
     // Queries the database to see how many login attempts were made in the last 10 minutes (by a given email).
     const countResult = await pool.query(
-        "SELECT COUNT(*)::int FROM login_codes WHERE email = $1 AND created_at >= NOW() - INTERVAL '10 minutes'",
+        "SELECT COUNT(*)::INT FROM login_codes WHERE email = $1 AND created_at >= NOW() - INTERVAL '10 minutes'",
         [cleanedEmail]
     );
     const recentCount = countResult.rows[0].count;
