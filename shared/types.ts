@@ -26,6 +26,7 @@ export type Group = {
     member_count: number;
     is_member: boolean;
     has_pending_request: boolean;
+    score: number;
 }
 
 // Courses must be made up of an id, code, and title.
