@@ -24,11 +24,16 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
         <dialog
             ref={dialogRef}
             onClose={onClose}
-            className="w-full max-w-lg rounded-lg p-6 backdrop:bg-black/50 m-auto"
+            className="w-full max-w-xl rounded-2xl p-6 backdrop:bg-black/50 m-auto"
         >
             <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{title}</h2>
-                <button type="button" onClick={onClose} aria-label="Close">x</button>
+                <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
+                <button 
+                    type="button" 
+                    onClick={onClose} 
+                    aria-label="Close"
+                    className="text-xl font-semibold hover:text-brand"
+                >x</button>
             </div>
             {children}
         </dialog>
