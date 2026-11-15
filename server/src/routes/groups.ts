@@ -3,13 +3,19 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { isSafeUrl } from '../../../shared/validation.js';
 import { pool } from '../db.js';
 
+import type { Me } from '../ranking.js';
+import { scoreGroup } from '../ranking.js';
+
 const router = express.Router();
 const MAX_OWNED_GROUPS = 5;
 
 router.post('/', requireAuth, async (req, res, next) => {
     const invalid: string[] = [];
-    const { name, description, courseId, joinPolicy, capacity, chatUrl, meetingMode } = req.body;
+    const { name, description, courseId, joinPolicy, capacity, chatUrl, meetingMode } = req.body || {};
     const userId = req.session.userId;
+
+    // Handles any malformed requests.
+    if (!name || !joinPolicy || !capacity || !meetingMode) return res.status(400).json({ error: "Malformed response." });
 
     // Clean free-text fields first. Non-strings are left alone so validation can reject them.
     const cleanedName = typeof name === 'string' ? name.trim() : '';
@@ -91,7 +97,7 @@ router.get('/', requireAuth, async (req, res) => {
     // While also left joining (because not all groups have to have an associated course) between groups and courses.
     const groupsResult = await pool.query(
         `SELECT
-        g.id, g.name, g.description, g.join_policy, g.capacity, g.meeting_mode, g.created_at,
+        g.id, g.name, g.description, g.course_id, g.join_policy, g.capacity, g.meeting_mode, g.created_at,
         c.code AS course_code,
         c.title AS course_title,
         (SELECT COUNT(*)::INT FROM group_members gm WHERE gm.group_id = g.id) AS member_count,
@@ -102,7 +108,86 @@ router.get('/', requireAuth, async (req, res) => {
         ORDER BY g.created_at DESC`,
         [userId]
     );
-    res.json(groupsResult.rows);
+
+    // Gather the row that corresponds the user information, and subsequently courses availability.
+    const meRow = await pool.query(
+        `SELECT program, year, study_style, group_size_min, group_size_max 
+        FROM users
+        WHERE id=$1`,
+        [userId]
+    );
+    const profile = meRow.rows[0];
+
+    const meCourseRows = await pool.query(
+        `SELECT course_id
+        FROM user_courses
+        WHERE user_id=$1`,
+        [userId]
+    );
+
+    const meAvailability = await pool.query(
+        `SELECT day, hour
+        FROM availability
+        WHERE user_id=$1`,
+        [userId]
+    );
+
+    // Construct the user object.
+    const me: Me = {
+        courseIds: meCourseRows.rows.map((course) => course.course_id),
+        program: profile.program,
+        year: profile.year,
+        studyStyle: profile.study_style,
+        groupSizeMin: profile.group_size_min,
+        groupSizeMax: profile.group_size_max,
+        freeSlots: new Set(meAvailability.rows.map((row) => `${row.day}-${row.hour}`))
+    };
+
+    // Query info each group and member availability, joining on user id.
+    const groupResult = await pool.query(
+        `SELECT gm.group_id, gm.user_id, u.program, u.year, u.study_style
+        FROM group_members gm
+        JOIN users u ON u.id = gm.user_id`
+    );
+
+    const groupAvailability = await pool.query(
+        `SELECT gm.group_id, gm.user_id, a.day, a.hour
+        FROM group_members gm
+        JOIN availability a ON a.user_id = gm.user_id`
+    );
+
+    // Now, we essentially sort it out so that it can be parsed in a meaningful manner.
+    const membersByGroup = new Map<number, { userId: number; program: string; year: number; studyStyle: string }[]>();
+    for (const row of groupResult.rows) {
+        if (!membersByGroup.has(row.group_id)) membersByGroup.set(row.group_id, []);
+        membersByGroup.get(row.group_id)!.push({
+            userId: row.user_id,
+            program: row.program,
+            year: row.year,
+            studyStyle: row.study_style
+        });
+    }
+
+    const slotsByGroup = new Map<number, Map<number, string[]>>();
+    for (const row of groupAvailability.rows) {
+        if (!slotsByGroup.has(row.group_id)) slotsByGroup.set(row.group_id, new Map());
+        const groupSlots = slotsByGroup.get(row.group_id)!;
+
+        if (!groupSlots.has(row.user_id)) groupSlots.set(row.user_id, []);
+        groupSlots.get(row.user_id)!.push(`${row.day}-${row.hour}`);
+    }
+
+    // We construct a scored object that compiles group information, and the means necessary to calculate the score.
+    const scored = groupsResult.rows.map((group) => {
+        const members = (membersByGroup.get(group.id) ?? []).filter((member) => member.userId !== userId);
+        const memberSlots = members.map((member) => slotsByGroup.get(group.id)?.get(member.userId) ?? []);
+        const score = scoreGroup(me, { courseId: group.course_id, members, memberSlots })
+
+        return { ...group, score };
+    });
+
+    // Return our scored object.
+    res.json(scored);
 });
 
 router.post('/:id/join', requireAuth, async (req, res, next) => {
