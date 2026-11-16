@@ -101,6 +101,8 @@ export default function CreateGroupForm({ onCreated }: CreateGroupFormProps) {
                 value={form.name} 
                 onChange={(e) => update({ name: e.target.value } )} 
                 placeholder="Calculus 2 study..."
+                minLength={3}
+                maxLength={60}
                 required
             />
             <Textarea 
@@ -108,6 +110,7 @@ export default function CreateGroupForm({ onCreated }: CreateGroupFormProps) {
                 value={form.description} 
                 onChange={(e) => update({ description: e.target.value })} 
                 className="resize-none"
+                maxLength={1000}
                 placeholder="Study group for calculus 2, meetings happen every Friday between 6-9PM..."
             />
             <Select 
@@ -150,7 +153,7 @@ export default function CreateGroupForm({ onCreated }: CreateGroupFormProps) {
                 ))}
             </Select>
             <Input
-                label="External chat URL (optional):"
+                label="External chat URL (optional, but highly recommended):"
                 type="url"
                 value={form.chatUrl}
                 onChange={(e) => update({ chatUrl: e.target.value })}
