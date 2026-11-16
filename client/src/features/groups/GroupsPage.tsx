@@ -4,6 +4,7 @@ import { get, post } from '@/lib/api';
 import { GroupCard } from './GroupCard';
 import { ErrorMessage } from '@/components/ui/ErrorMessage';
 import CreateGroupForm from './CreateGroupForm';
+import { RequestForm } from './RequestForm';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
@@ -18,6 +19,7 @@ export default function GroupsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [showCreate, setShowCreate] = useState(false);
+    const [requestingGroup, setRequestingGroup] = useState<Group | null>(null);
     const [startIndex, setStartIndex] = useState(0);
     
     // State related to the filtering functions of the page.
@@ -25,6 +27,7 @@ export default function GroupsPage() {
     const [courseFilter, setCourseFilter] = useState('');
     const [modeFilter, setModeFilter] = useState('');
     const [sortFilter, setSortFilter] = useState('');
+    const [sortJoin, setSortJoin] = useState('');
     const [onlyJoinable, setOnlyJoinable] = useState(false);
 
     // Cleaned text provided by the filter input, and course options narrowed down by specifically the courses that currently exist in a group.
@@ -44,8 +47,11 @@ export default function GroupsPage() {
         // Filters based on groups that are currently able to be requested, or joinable.
         const matchesOnlyJoinable = !onlyJoinable || (!(group.is_member) && !(group.has_pending_request) && (group.capacity > group.member_count));
 
+        // Filters based on join policy.
+        const sortJoinOnly = sortJoin === '' || group.join_policy.includes(sortJoin);
+
         // Returns the union of them, essentially allowing for mixed combinations.
-        return matchesSearch && matchesCourse && matchesMode && matchesOnlyJoinable;
+        return matchesSearch && matchesCourse && matchesMode && matchesOnlyJoinable && sortJoinOnly;
     });
 
     const sorted = sortFilter === 'match'
@@ -69,8 +75,8 @@ export default function GroupsPage() {
         loadGroups();
     }, []);
 
-    async function handleJoin(groupId: number) {
-        const result = await post(`/groups/${groupId}/join`);
+    async function handleJoin(groupId: number, message?: string) {
+        const result = await post(`/groups/${groupId}/join`, { message });
 
         setGroups((prev) => prev.map((g) => {
             if (g.id !== groupId) return g;
@@ -95,13 +101,29 @@ export default function GroupsPage() {
                 }}/>
             </Modal>
 
+            <Modal
+                open={requestingGroup !== null}
+                onClose={() => setRequestingGroup(null)}
+                title={`Request to join ${requestingGroup?.name ?? ''}`}
+            >
+                {requestingGroup && (
+                    <RequestForm 
+                        group={requestingGroup}
+                        onSend={async (message) => {
+                            await handleJoin(requestingGroup.id, message);
+                            setRequestingGroup(null);
+                        }}
+                    />
+                )}
+            </Modal>
+
             {loading ? (
                 <p className="text-slate-600">Loading groups...</p>
             ) : error ? (
                 <ErrorMessage>{error}</ErrorMessage>
             ) : (
                 <>
-                    <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-end">
+                    <div className="flex flex-col items-center gap-3 sm:flex-row">
                         <Input 
                             label="Search group:"
                             type="text"
@@ -155,6 +177,19 @@ export default function GroupsPage() {
                             <option value="match">Match</option>
                         </Select>
 
+                        <Select
+                            label="Join:"
+                            value={sortJoin}
+                            onChange={(e) => {
+                                setSortJoin(e.target.value);
+                                setStartIndex(0);
+                            }}
+                        >
+                            <option value="">Default</option>
+                            <option value="request">Request</option>
+                            <option value="open">Join</option>
+                        </Select>
+
                         <Checkbox
                             label="Only joinable"
                             type="checkbox"
@@ -177,7 +212,12 @@ export default function GroupsPage() {
                                 </div>
                                 <div className="grid gap-4 max-h-full md:grid-cols-2 lg:grid-cols-3">
                                 {currentGroups.map((group) => (
-                                    <GroupCard key={group.id} group={group} onJoin={handleJoin} />
+                                    <GroupCard 
+                                        key={group.id} 
+                                        group={group} 
+                                        onJoin={handleJoin} 
+                                        onRequest={setRequestingGroup}
+                                    />
                                 ))}
                                 </div>
                                 <div className="flex w-full items-center justify-between">

@@ -8,6 +8,7 @@ import type { Group } from '@shared/types';
 type GroupCardProps = {
     group: Group;
     onJoin: (groupId: number) => Promise<void>;
+    onRequest: (group: Group) => void;
 }
 
 // Object for the possible combinations for the meeting labels.
@@ -17,7 +18,7 @@ const MEETING_LABELS = {
     hybrid: 'Hybrid'
 }
 
-export function GroupCard({ group, onJoin }: GroupCardProps) {
+export function GroupCard({ group, onJoin, onRequest }: GroupCardProps) {
     const [joining, setJoining] = useState(false);
     const [error, setError] = useState('');
     const isFull = group.member_count >= group.capacity;
@@ -25,6 +26,12 @@ export function GroupCard({ group, onJoin }: GroupCardProps) {
 
     // Whenever the user clicks on the button to join or send a request.
     async function handleJoinClick() {
+        // If the user attempt to join, we trigger the onRequest function (which triggers the modal to open to prompt the user for a request message).
+        if (group.join_policy === 'request') {
+            onRequest(group);
+            return;
+        }
+        
         setError('');
         setJoining(true);
         try {
