@@ -27,6 +27,7 @@ export type Group = {
     is_member: boolean;
     is_owner: boolean;
     has_pending_request: boolean;
+    score: number;
 }
 
 export type GroupMember = {

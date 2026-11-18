@@ -28,6 +28,12 @@ export function GroupCard({ group, onJoin, onLeave }: GroupCardProps) {
 
     // Whenever the user clicks on the button to join or send a request.
     async function handleJoinClick() {
+        // If the user attempt to join, we trigger the onRequest function (which triggers the modal to open to prompt the user for a request message).
+        if (group.join_policy === 'request') {
+            onRequest(group);
+            return;
+        }
+        
         setError('');
         setJoining(true);
         try {
@@ -62,7 +68,7 @@ export function GroupCard({ group, onJoin, onLeave }: GroupCardProps) {
                 : 'Request to join';
 
     return(
-        <article className="flex h-full flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-brand hover:shadow-md">
+        <article className="flex h-full flex-col gap-4 rounded-xl border-2 border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-brand hover:shadow-md">
             <p className="flex items-start justify-between gap-3">
                 <span className="text-sm font-medium text-brand">{group.course_code ?? 'General'}</span>
                 <Badge tone="neutral">{MEETING_LABELS[group.meeting_mode]}</Badge>
@@ -81,9 +87,20 @@ export function GroupCard({ group, onJoin, onLeave }: GroupCardProps) {
                     </span>
                 </p>
 
+                <>
+                    <p className="text-sm text-slate-500">Compatibility: {group.score}%</p>
+                    <div className="h-1.5 rounded-full bg-slate-200">
+                        <div
+                            className="h-1.5 rounded-full bg-linear-to-r from-brand via-brand-dark to-accent transition-all duration-300"
+                            style={{ width: `${group.score}%` }}
+                        />
+                    </div>
+                </>
+
                 <Button
                     onClick={handleJoinClick}
                     disabled={joining || group.is_member || group.has_pending_request || isFull}
+                    className="w-full"
                 >
                     {isFull && !group.is_member ? 'Group full' : buttonLabel}
                 </Button>
