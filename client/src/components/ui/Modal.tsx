@@ -28,7 +28,14 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
         >
             <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-xl font-semibold">{title}</h2>
-                <button type="button" onClick={onClose} aria-label="Close">x</button>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    aria-label="Close"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-red-600 text-lg font-bold leading-none text-white hover:bg-red-700"
+                >
+                    ×
+                </button>
             </div>
             {children}
         </dialog>

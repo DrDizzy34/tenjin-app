@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
-import { get } from '@/lib/api';
+import { useEffect, useRef, useState } from 'react';
+import { del, get, patch, post } from '@/lib/api';
+import { Modal } from '@/components/ui/Modal';
+import type { GroupMember } from '@shared/types';
 
 type DashboardGroup = {
   id: number;
   name: string;
+  is_owner: boolean;
   meeting_mode: 'in_person' | 'online' | 'hybrid';
   course_code: string | null;
   chat_url: string | null;
@@ -18,16 +21,41 @@ type DashboardNotification = {
   actor_name: string | null;
 };
 
+type GroupJoinRequest = {
+  id: number;
+  group_id: number;
+  message: string | null;
+  created_at: string;
+  group_name: string;
+  requester_name: string | null;
+};
+
 interface DashboardResponse {
   groups: DashboardGroup[];
   notifications: DashboardNotification[];
+  requests: GroupJoinRequest[];
 }
 
 export default function DashboardPage() {
   const [groups, setGroups] = useState<DashboardGroup[]>([]);
   const [notifications, setNotifications] = useState<DashboardNotification[]>([]);
+  const [joinRequests, setJoinRequests] = useState<GroupJoinRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [requestActionId, setRequestActionId] = useState<number | null>(null);
+  const [requestError, setRequestError] = useState('');
+  const [notificationAction, setNotificationAction] = useState<string | null>(null);
+  const [notificationError, setNotificationError] = useState('');
+  const [managingGroup, setManagingGroup] = useState<DashboardGroup | null>(null);
+  const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [membersError, setMembersError] = useState('');
+  const [memberToRemove, setMemberToRemove] = useState<GroupMember | null>(null);
+  const [removingMemberId, setRemovingMemberId] = useState<number | null>(null);
+  const membersRequestId = useRef(0);
+  const [groupToLeave, setGroupToLeave] = useState<DashboardGroup | null>(null);
+  const [leavingGroupId, setLeavingGroupId] = useState<number | null>(null);
+  const [leaveGroupError, setLeaveGroupError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -38,6 +66,7 @@ export default function DashboardPage() {
         if (active) {
           setGroups(result.groups);
           setNotifications(result.notifications);
+          setJoinRequests(result.requests);
           setError('');
         }
       } catch (err) {
@@ -67,6 +96,118 @@ export default function DashboardPage() {
   }, []);
 
   const hasNewNotifications = notifications.some((notification) => notification.read_at === null);
+
+  async function handleOpenMembers(group: DashboardGroup) {
+    const requestId = ++membersRequestId.current;
+    setManagingGroup(group);
+    setGroupMembers([]);
+    setMembersError('');
+    setMemberToRemove(null);
+    setMembersLoading(true);
+    try {
+      const result = await get(`/groups/${group.id}/members`);
+      if (membersRequestId.current === requestId) setGroupMembers(result);
+    } catch (err) {
+      if (membersRequestId.current === requestId) {
+        setMembersError(err instanceof Error ? err.message : 'Could not load group members.');
+      }
+    } finally {
+      if (membersRequestId.current === requestId) setMembersLoading(false);
+    }
+  }
+
+  function handleCloseMembers() {
+    membersRequestId.current += 1;
+    setManagingGroup(null);
+    setMemberToRemove(null);
+  }
+
+  async function handleRemoveMember() {
+    if (!managingGroup || !memberToRemove) return;
+
+    setRemovingMemberId(memberToRemove.id);
+    setMembersError('');
+    try {
+      await del(`/groups/${managingGroup.id}/members/${memberToRemove.id}`);
+      setGroupMembers((current) => current.filter((member) => member.id !== memberToRemove.id));
+      setMemberToRemove(null);
+    } catch (err) {
+      setMembersError(err instanceof Error ? err.message : 'Could not remove this group member.');
+    } finally {
+      setRemovingMemberId(null);
+    }
+  }
+
+  async function handleLeaveGroup() {
+    if (!groupToLeave) return;
+
+    setLeavingGroupId(groupToLeave.id);
+    setLeaveGroupError('');
+    try {
+      await post(`/groups/${groupToLeave.id}/leave`);
+      setGroups((current) => current.filter((group) => group.id !== groupToLeave.id));
+      setJoinRequests((current) => current.filter((request) => request.group_id !== groupToLeave.id));
+      setGroupToLeave(null);
+    } catch (err) {
+      setLeaveGroupError(err instanceof Error ? err.message : 'Could not leave this group.');
+    } finally {
+      setLeavingGroupId(null);
+    }
+  }
+
+  async function handleRequestDecision(request: GroupJoinRequest, decision: 'accepted' | 'declined') {
+    setRequestActionId(request.id);
+    setRequestError('');
+    try {
+      await post(`/groups/${request.group_id}/requests/${request.id}`, { decision });
+      setJoinRequests((current) => current.filter((item) => item.id !== request.id));
+    } catch (err) {
+      setRequestError(err instanceof Error ? err.message : 'Could not update this join request.');
+    } finally {
+      setRequestActionId(null);
+    }
+  }
+
+  async function handleMarkNotificationRead(notification: DashboardNotification) {
+    setNotificationAction(`read-${notification.id}`);
+    setNotificationError('');
+    try {
+      const result = await patch(`/dashboard/notifications/${notification.id}/read`);
+      setNotifications((current) => current.map((item) => (
+        item.id === notification.id ? { ...item, read_at: result.notification.read_at } : item
+      )));
+    } catch (err) {
+      setNotificationError(err instanceof Error ? err.message : 'Could not mark notification as read.');
+    } finally {
+      setNotificationAction(null);
+    }
+  }
+
+  async function handleDeleteNotification(notificationId: number) {
+    setNotificationAction(`delete-${notificationId}`);
+    setNotificationError('');
+    try {
+      await del(`/dashboard/notifications/${notificationId}`);
+      setNotifications((current) => current.filter((item) => item.id !== notificationId));
+    } catch (err) {
+      setNotificationError(err instanceof Error ? err.message : 'Could not delete notification.');
+    } finally {
+      setNotificationAction(null);
+    }
+  }
+
+  async function handleClearNotifications() {
+    setNotificationAction('clear');
+    setNotificationError('');
+    try {
+      await del('/dashboard/notifications');
+      setNotifications([]);
+    } catch (err) {
+      setNotificationError(err instanceof Error ? err.message : 'Could not clear notifications.');
+    } finally {
+      setNotificationAction(null);
+    }
+  }
 
   return (
     <section className="px-6 py-10 sm:px-10 lg:px-14 lg:py-14">
@@ -104,21 +245,46 @@ export default function DashboardPage() {
 
                 return (
                   <li key={group.id}>
-                    {chatUrl ? (
-                      <a
-                        href={chatUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`Open chat for ${group.name}`}
-                        className="flex min-w-0 items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-brand hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-                      >
-                        {content}
-                      </a>
-                    ) : (
-                      <div className="flex min-w-0 items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                        {content}
-                      </div>
-                    )}
+                    <div className="flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-brand hover:shadow-md">
+                      {chatUrl ? (
+                        <a
+                          href={chatUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`Open chat for ${group.name}`}
+                          className="flex min-w-0 flex-1 items-center gap-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                        >
+                          {content}
+                        </a>
+                      ) : (
+                        <div className="flex min-w-0 flex-1 items-center gap-4">
+                          {content}
+                        </div>
+                      )}
+                      {group.is_owner && (
+                        <div className="flex shrink-0 flex-col gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => void handleOpenMembers(group)}
+                            aria-label={`Manage members of ${group.name}`}
+                            className="rounded-lg bg-brand/10 px-2.5 py-1.5 text-xs font-semibold text-brand transition hover:bg-brand/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                          >
+                            Members
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLeaveGroupError('');
+                              setGroupToLeave(group);
+                            }}
+                            aria-label={`Leave ${group.name}`}
+                            className="rounded-lg bg-accent px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-accent/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                          >
+                            Leave group
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </li>
                 );
               })}
@@ -126,14 +292,27 @@ export default function DashboardPage() {
           )}
         </div>
 
+        <div className="space-y-6">
         <aside aria-labelledby="notifications-heading" className="h-fit rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <h2 id="notifications-heading" className="text-lg font-semibold text-slate-900">Notifications</h2>
-            {hasNewNotifications && (
-              <span className="rounded-full bg-accent/10 px-2.5 py-1 text-xs font-semibold text-accent">
-                {notifications.filter((notification) => notification.read_at === null).length} new
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {hasNewNotifications && (
+                <span className="rounded-full bg-accent/10 px-2.5 py-1 text-xs font-semibold text-accent">
+                  {notifications.filter((notification) => notification.read_at === null).length} new
+                </span>
+              )}
+              {notifications.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void handleClearNotifications()}
+                  disabled={notificationAction !== null}
+                  className="text-xs font-medium text-slate-500 underline-offset-2 hover:text-red-700 hover:underline disabled:opacity-50"
+                >
+                  {notificationAction === 'clear' ? 'Clearing...' : 'Clear all'}
+                </button>
+              )}
+            </div>
           </div>
 
           {loading ? (
@@ -145,19 +324,185 @@ export default function DashboardPage() {
           {notifications.length > 0 && (
             <ul className="mt-4 divide-y divide-slate-100">
               {notifications.map((notification) => (
-                <li key={notification.id} className="py-4 first:pt-0 last:pb-0">
-                  <p className={`text-sm leading-6 ${notification.read_at ? 'text-slate-500' : 'text-slate-800'}`}>
-                    {getNotificationMessage(notification)}
-                  </p>
-                  <time dateTime={notification.created_at} className="mt-1 block text-xs text-slate-400">
-                    {formatNotificationDate(notification.created_at)}
-                  </time>
+                <li key={notification.id} className={`py-4 first:pt-0 last:pb-0 ${notification.read_at ? 'opacity-70' : ''}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm leading-6 text-slate-800">{getNotificationMessage(notification)}</p>
+                      <time dateTime={notification.created_at} className="mt-1 block text-xs text-slate-400">
+                        {formatNotificationDate(notification.created_at)}
+                      </time>
+                    </div>
+                    {notification.read_at ? (
+                      <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500">
+                        Read
+                      </span>
+                    ) : (
+                      <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-brand" aria-label="Unread" />
+                    )}
+                  </div>
+                  <div className="mt-2 flex gap-4">
+                    {!notification.read_at && (
+                      <button
+                        type="button"
+                        onClick={() => void handleMarkNotificationRead(notification)}
+                        disabled={notificationAction !== null}
+                        className="text-xs font-medium text-brand hover:underline disabled:opacity-50"
+                      >
+                        {notificationAction === `read-${notification.id}` ? 'Marking...' : 'Mark as read'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteNotification(notification.id)}
+                      disabled={notificationAction !== null}
+                      className="text-xs font-medium text-slate-500 hover:text-red-700 hover:underline disabled:opacity-50"
+                    >
+                      {notificationAction === `delete-${notification.id}` ? 'Deleting...' : 'Delete'}
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
           )}
+          {notificationError && <p className="mt-4 text-sm text-red-700" role="alert">{notificationError}</p>}
+        </aside>
+        <aside aria-labelledby="group-inbox-heading" className="h-fit rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <h2 id="group-inbox-heading" className="text-lg font-semibold text-slate-900">Group inbox</h2>
+              {joinRequests.length > 0 && (
+                <span className="rounded-full bg-brand/10 px-2.5 py-1 text-xs font-semibold text-brand">
+                  {joinRequests.length} pending
+                </span>
+              )}
+            </div>
+            {loading ? (
+              <p className="mt-4 text-sm text-slate-500">Loading requests...</p>
+            ) : joinRequests.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-500">There are no current requests.</p>
+            ) : (
+              <ul className="mt-4 divide-y divide-slate-100">
+                {joinRequests.map((request) => (
+                <li key={request.id} className="py-4 first:pt-0 last:pb-0">
+                  <p className="text-sm leading-6 text-slate-800">
+                    <span className="font-semibold">{request.requester_name || 'A student'}</span>
+                    {' '}requested to join <span className="font-semibold">{request.group_name}</span>.
+                  </p>
+                  {request.message && <p className="mt-2 text-sm text-slate-600">{request.message}</p>}
+                  <time dateTime={request.created_at} className="mt-1 block text-xs text-slate-400">
+                    {formatNotificationDate(request.created_at)}
+                  </time>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleRequestDecision(request, 'accepted')}
+                      disabled={requestActionId !== null}
+                      className="rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {requestActionId === request.id ? 'Updating...' : 'Accept'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleRequestDecision(request, 'declined')}
+                      disabled={requestActionId !== null}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </li>
+                ))}
+              </ul>
+            )}
+            {requestError && <p className="mt-4 text-sm text-red-700" role="alert">{requestError}</p>}
         </aside>
         </div>
+        </div>
+        <Modal
+          open={managingGroup !== null}
+          onClose={handleCloseMembers}
+          title={`Members of ${managingGroup?.name ?? 'group'}`}
+        >
+          {memberToRemove ? (
+            <>
+              <p className="text-sm text-slate-600">
+                Remove {memberToRemove.display_name || 'this member'} from {managingGroup?.name}?
+              </p>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setMemberToRemove(null)}
+                  disabled={removingMemberId !== null}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleRemoveMember()}
+                  disabled={removingMemberId !== null}
+                  className="rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-dark disabled:opacity-50"
+                >
+                  {removingMemberId === memberToRemove.id ? 'Removing...' : 'Remove member'}
+                </button>
+              </div>
+            </>
+          ) : membersLoading ? (
+            <p className="text-sm text-slate-600">Loading members...</p>
+          ) : membersError ? null : groupMembers.length === 0 ? (
+            <p className="text-sm text-slate-600">There are no members in this group.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {groupMembers.map((member) => (
+                <li key={member.id} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+                  <span className="text-sm font-medium text-slate-800">
+                    {member.display_name || 'Name not set'}
+                    {member.role === 'owner' && (
+                      <span className="ml-2 text-xs font-normal text-slate-500">Owner</span>
+                    )}
+                  </span>
+                  {member.role === 'member' && (
+                    <button
+                      type="button"
+                      onClick={() => setMemberToRemove(member)}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {membersError && <p className="mt-4 text-sm text-red-700" role="alert">{membersError}</p>}
+        </Modal>
+        <Modal
+          open={groupToLeave !== null}
+          onClose={() => setGroupToLeave(null)}
+          title="Delete your group?"
+        >
+          <p className="text-sm leading-6 text-slate-600">
+            Leaving {groupToLeave?.name} as its owner will permanently delete the group, remove its members, and cancel pending requests. This cannot be undone.
+          </p>
+          {leaveGroupError && <p className="mt-4 text-sm text-red-700" role="alert">{leaveGroupError}</p>}
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setGroupToLeave(null)}
+              disabled={leavingGroupId !== null}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleLeaveGroup()}
+              disabled={leavingGroupId !== null}
+              className="rounded-lg bg-red-700 px-3 py-2 text-sm font-medium text-white hover:bg-red-800 disabled:opacity-50"
+            >
+              {leavingGroupId === groupToLeave?.id ? 'Deleting...' : 'Delete group'}
+            </button>
+          </div>
+        </Modal>
       </div>
     </section>
   );

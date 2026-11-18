@@ -71,6 +71,15 @@ export default function GroupsPage() {
         }));
     }
 
+    async function handleLeave(groupId: number) {
+        await post(`/groups/${groupId}/leave`);
+        setGroups((prev) => prev.map((group) => (
+            group.id === groupId
+                ? { ...group, is_member: false, member_count: Math.max(0, group.member_count - 1) }
+                : group
+        )));
+    }
+
     return (
         <div className="mx-auto max-w-screen-2xl px-6 py-10 sm:px-10 lg:px-14">
             <h1 className="text-3xl font-bold tracking-tight text-slate-900">Groups</h1>
@@ -137,7 +146,7 @@ export default function GroupsPage() {
                     ) : (
                         <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                             {visibleGroups.map((group) => (
-                                <GroupCard key={group.id} group={group} onJoin={handleJoin} />
+                                <GroupCard key={group.id} group={group} onJoin={handleJoin} onLeave={handleLeave} />
                             ))}
                         </div>
                     )}

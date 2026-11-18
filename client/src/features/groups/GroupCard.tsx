@@ -2,12 +2,14 @@ import { useState } from 'react';
 
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Modal } from '@/components/ui/Modal';
 import type { Group } from '@shared/types';
 
 // Type for the group card properties.
 type GroupCardProps = {
     group: Group;
     onJoin: (groupId: number) => Promise<void>;
+    onLeave: (groupId: number) => Promise<void>;
 }
 
 // Object for the possible combinations for the meeting labels.
@@ -17,11 +19,12 @@ const MEETING_LABELS = {
     hybrid: 'Hybrid'
 }
 
-export function GroupCard({ group, onJoin }: GroupCardProps) {
+export function GroupCard({ group, onJoin, onLeave }: GroupCardProps) {
     const [joining, setJoining] = useState(false);
+    const [leaving, setLeaving] = useState(false);
+    const [showLeaveConfirmation, setShowLeaveConfirmation] = useState(false);
     const [error, setError] = useState('');
     const isFull = group.member_count >= group.capacity;
-
 
     // Whenever the user clicks on the button to join or send a request.
     async function handleJoinClick() {
@@ -33,6 +36,19 @@ export function GroupCard({ group, onJoin }: GroupCardProps) {
             setError(err instanceof Error ? err.message : 'Something went wrong');
         } finally {
             setJoining(false);
+        }
+    }
+
+    async function handleLeaveClick() {
+        setError('');
+        setLeaving(true);
+        try {
+            await onLeave(group.id);
+            setShowLeaveConfirmation(false);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Could not leave this group.');
+        } finally {
+            setLeaving(false);
         }
     }
 
@@ -71,8 +87,41 @@ export function GroupCard({ group, onJoin }: GroupCardProps) {
                 >
                     {isFull && !group.is_member ? 'Group full' : buttonLabel}
                 </Button>
+                {group.is_member && !group.is_owner && (
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setShowLeaveConfirmation(true)}
+                        disabled={leaving}
+                        className="w-full"
+                    >
+                        Leave group
+                    </Button>
+                )}
             </div>
             {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+            <Modal
+                open={showLeaveConfirmation}
+                onClose={() => setShowLeaveConfirmation(false)}
+                title="Leave group?"
+            >
+                <p className="text-sm text-slate-600">
+                    Are you sure you want to leave {group.name}? You can request to join again later.
+                </p>
+                <div className="mt-6 flex justify-end gap-3">
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setShowLeaveConfirmation(false)}
+                        disabled={leaving}
+                    >
+                        Cancel
+                    </Button>
+                    <Button type="button" onClick={() => void handleLeaveClick()} disabled={leaving}>
+                        {leaving ? 'Leaving...' : 'Leave group'}
+                    </Button>
+                </div>
+            </Modal>
         </article>
     );
 }
